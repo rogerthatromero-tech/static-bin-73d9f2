@@ -2,17 +2,18 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Camo – Flavor 3D</title>
+    <title>Camo – Flavor 3D Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Google Model Viewer -->
     <script
       type="module"
-      src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js">
-    </script>
+      src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
+    ></script>
 
     <style>
-      html, body {
+      html,
+      body {
         margin: 0;
         padding: 0;
         width: 100%;
@@ -30,79 +31,96 @@
         width: 100%;
         height: 100%;
         --poster-color: #000000;
+        background-color: #000000;
       }
     </style>
   </head>
   <body>
     <div class="viewer-wrapper">
       <model-viewer
-        id="flavor-viewer"
-        src="https://cdn.shopify.com/3d/models/c3984cd92fb8c51e/cacao.glb"
-        alt="Cacao flavor 3D model"
+        id="camo-viewer"
+        alt="Camo flavor 3D model"
         camera-controls
-        auto-rotate
         autoplay
-        exposure="1.1"
         shadow-intensity="1"
+        exposure="1.1"
         environment-image="neutral"
         disable-zoom="false"
-        interaction-prompt="none">
+        interaction-prompt="none"
+      >
       </model-viewer>
     </div>
 
     <script>
-      const viewer = document.getElementById('flavor-viewer');
+      (function () {
+        const viewer = document.getElementById("camo-viewer");
 
-      // FINAL hero pose (front-ish)
-      const endOrbit = {
-        theta: 0,        // 0deg = front
-        phi: 75,         // elevation
-        radius: 2.0      // distance in meters-ish
-      };
+        // 1) Get model URL from ?model=... (Shopify iframe src should add this)
+        const params = new URLSearchParams(window.location.search);
+        const modelFromQuery = params.get("model");
 
-      // START pose (behind + farther away, like Sketchfab fly-in)
-      const startOrbit = {
-        theta: 200,      // a bit behind the fruit
-        phi: 80,
-        radius: 4.0
-      };
+        // Fallback: if no query param, you can hardcode a default here:
+        const fallbackModel = "assets/models/cacao.glb";
 
-      function lerp(a, b, t) {
-        return a + (b - a) * t;
-      }
+        const modelUrl = modelFromQuery || fallbackModel;
 
-      // Ease-out cubic so it slows down as it lands in place
-      function easeOutCubic(t) {
-        return 1 - Math.pow(1 - t, 3);
-      }
+        // Set the model source
+        viewer.src = modelUrl;
 
-      viewer.addEventListener('load', () => {
-        // Set initial camera position behind the fruit
-        viewer.cameraOrbit = `${startOrbit.theta}deg ${startOrbit.phi}deg ${startOrbit.radius}m`;
+        // 2) Intro animation when the model finishes loading
+        viewer.addEventListener("load", () => {
+          runIntroAnimation(viewer);
+        });
 
-        const duration = 2500; // ms
-        const startTime = performance.now();
+        function runIntroAnimation(el) {
+          // Stop any previous animation logic
+          let startTime = null;
+          const duration = 2200; // ms
 
-        function animate(now) {
-          const elapsed = now - startTime;
-          let t = Math.min(elapsed / duration, 1);
-          t = easeOutCubic(t);
+          // starting + ending camera-orbit values
+          const startTheta = -150; // behind / off to the side
+          const endTheta = 210; // spin around to front (total 360° spin)
+          const startRadius = 3.0; // farther away
+          const endRadius = 1.8; // closer
+          const phi = 70; // vertical angle
 
-          const theta  = lerp(startOrbit.theta, endOrbit.theta, t);
-          const phi    = lerp(startOrbit.phi,   endOrbit.phi,   t);
-          const radius = lerp(startOrbit.radius, endOrbit.radius, t);
-
-          viewer.cameraOrbit = `${theta}deg ${phi}deg ${radius}m`;
-
-          if (t < 1) {
-            requestAnimationFrame(animate);
-          } else {
-            // optional: hand full control back to user, or leave auto-rotate on
+          function easeInOutQuad(t) {
+            return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
           }
-        }
 
-        requestAnimationFrame(animate);
-      });
+          function step(timestamp) {
+            if (!startTime) startTime = timestamp;
+            const elapsed = timestamp - startTime;
+            let t = elapsed / duration;
+
+            if (t > 1) t = 1;
+            const e = easeInOutQuad(t);
+
+            const theta = startTheta + (endTheta - startTheta) * e;
+            const radius = startRadius + (endRadius - startRadius) * e;
+
+            const orbit = `${theta}deg ${phi}deg ${radius}m`;
+            el.setAttribute("camera-orbit", orbit);
+
+            if (t < 1) {
+              requestAnimationFrame(step);
+            } else {
+              // Final “rest” position straight on
+              el.setAttribute("camera-orbit", `0deg ${phi}deg ${endRadius}m`);
+
+              // Optional: slow continuous rotation afterward
+              el.setAttribute("auto-rotate", "");
+              el.setAttribute("auto-rotate-delay", "2000");
+            }
+          }
+
+          // Reset rotation + stop built-in auto-rotate while we play intro
+          el.removeAttribute("auto-rotate");
+          el.setAttribute("camera-orbit", `${startTheta}deg ${phi}deg ${startRadius}m`);
+
+          requestAnimationFrame(step);
+        }
+      })();
     </script>
   </body>
 </html>
