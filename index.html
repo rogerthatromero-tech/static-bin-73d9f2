@@ -2,18 +2,11 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Camo – Flavor 3D Viewer</title>
+    <title>Camo – 3D Flavor Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
-    <!-- Google Model Viewer -->
-    <script
-      type="module"
-      src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
-    ></script>
-
     <style>
-      html,
-      body {
+      html, body {
         margin: 0;
         padding: 0;
         width: 100%;
@@ -22,105 +15,218 @@
         background: #000;
       }
 
-      .viewer-wrapper {
+      #viewer-container {
         width: 100%;
         height: 100%;
       }
 
-      model-viewer {
-        width: 100%;
-        height: 100%;
-        --poster-color: #000000;
-        background-color: #000000;
+      canvas {
+        display: block;
       }
     </style>
   </head>
   <body>
-    <div class="viewer-wrapper">
-      <model-viewer
-        id="camo-viewer"
-        alt="Camo flavor 3D model"
-        camera-controls
-        autoplay
-        shadow-intensity="1"
-        exposure="1.1"
-        environment-image="neutral"
-        disable-zoom="false"
-        interaction-prompt="none"
-      >
-      </model-viewer>
-    </div>
+    <div id="viewer-container"></div>
 
-    <script>
-      (function () {
-        const viewer = document.getElementById("camo-viewer");
+    <script type="module">
+      import * as THREE from "https://unpkg.com/three@0.164.0/build/three.module.js";
+      import { OrbitControls } from "https://unpkg.com/three@0.164.0/examples/jsm/controls/OrbitControls.js";
+      import { GLTFLoader } from "https://unpkg.com/three@0.164.0/examples/jsm/loaders/GLTFLoader.js";
 
-        // 1) Get model URL from ?model=... (Shopify iframe src should add this)
+      // ----------- Basic setup -----------
+      const container = document.getElementById("viewer-container");
+
+      const scene = new THREE.Scene();
+      scene.background = new THREE.Color(0x000000);
+
+      const camera = new THREE.PerspectiveCamera(
+        35,
+        window.innerWidth / window.innerHeight,
+        0.01,
+        100
+      );
+      camera.position.set(0, 0.1, 4);
+
+      const renderer = new THREE.WebGLRenderer({
+        antialias: true,
+        alpha: true
+      });
+      renderer.setPixelRatio(window.devicePixelRatio);
+      renderer.setSize(window.innerWidth, window.innerHeight);
+      renderer.outputEncoding = THREE.sRGBEncoding;
+      container.appendChild(renderer.domElement);
+
+      // ----------- Lights -----------
+      const hemiLight = new THREE.HemisphereLight(0xffffff, 0x444444, 1.1);
+      hemiLight.position.set(0, 1, 0);
+      scene.add(hemiLight);
+
+      const dirLight = new THREE.DirectionalLight(0xffffff, 1.2);
+      dirLight.position.set(3, 5, 5);
+      scene.add(dirLight);
+
+      const spotLight = new THREE.SpotLight(0xffffff, 0.7, 0, Math.PI / 6, 0.3);
+      spotLight.position.set(-4, 6, -4);
+      scene.add(spotLight);
+
+      // ----------- Controls -----------
+      const controls = new OrbitControls(camera, renderer.domElement);
+      controls.enableDamping = true;
+      controls.dampingFactor = 0.05;
+      controls.enablePan = false;
+
+      // ----------- Loader -----------
+      const loader = new GLTFLoader();
+
+      function getModelUrlFromQuery() {
         const params = new URLSearchParams(window.location.search);
-        const modelFromQuery = params.get("model");
+        let url = params.get("model");
 
-        // Fallback: if no query param, you can hardcode a default here:
-        const fallbackModel = "assets/models/cacao.glb";
-
-        const modelUrl = modelFromQuery || fallbackModel;
-
-        // Set the model source
-        viewer.src = modelUrl;
-
-        // 2) Intro animation when the model finishes loading
-        viewer.addEventListener("load", () => {
-          runIntroAnimation(viewer);
-        });
-
-        function runIntroAnimation(el) {
-          // Stop any previous animation logic
-          let startTime = null;
-          const duration = 2200; // ms
-
-          // starting + ending camera-orbit values
-          const startTheta = -150; // behind / off to the side
-          const endTheta = 210; // spin around to front (total 360° spin)
-          const startRadius = 3.0; // farther away
-          const endRadius = 1.8; // closer
-          const phi = 70; // vertical angle
-
-          function easeInOutQuad(t) {
-            return t < 0.5 ? 2 * t * t : -1 + (4 - 2 * t) * t;
-          }
-
-          function step(timestamp) {
-            if (!startTime) startTime = timestamp;
-            const elapsed = timestamp - startTime;
-            let t = elapsed / duration;
-
-            if (t > 1) t = 1;
-            const e = easeInOutQuad(t);
-
-            const theta = startTheta + (endTheta - startTheta) * e;
-            const radius = startRadius + (endRadius - startRadius) * e;
-
-            const orbit = `${theta}deg ${phi}deg ${radius}m`;
-            el.setAttribute("camera-orbit", orbit);
-
-            if (t < 1) {
-              requestAnimationFrame(step);
-            } else {
-              // Final “rest” position straight on
-              el.setAttribute("camera-orbit", `0deg ${phi}deg ${endRadius}m`);
-
-              // Optional: slow continuous rotation afterward
-              el.setAttribute("auto-rotate", "");
-              el.setAttribute("auto-rotate-delay", "2000");
-            }
-          }
-
-          // Reset rotation + stop built-in auto-rotate while we play intro
-          el.removeAttribute("auto-rotate");
-          el.setAttribute("camera-orbit", `${startTheta}deg ${phi}deg ${startRadius}m`);
-
-          requestAnimationFrame(step);
+        // Fallback if nothing passed
+        if (!url || url === "undefined") {
+          // You can change this fallback to whatever you want:
+          url = "assets/models/cacao.glb";
         }
-      })();
+
+        // If Shopify passes a full CDN URL, just use it.
+        // If it's a relative path (assets/models/cacao.glb), that's fine too.
+        return url;
+      }
+
+      let currentModel = null;
+
+      let entranceStart = null;
+      const entranceDuration = 2500; // ms
+      let entranceActive = false;
+
+      const camStart = new THREE.Vector3();
+      const camEnd = new THREE.Vector3();
+      const lookAtTarget = new THREE.Vector3(0, 0, 0);
+
+      function cleanMaterial(material) {
+        material.dispose();
+        for (const key in material) {
+          const value = material[key];
+          if (value && typeof value === "object" && value.isTexture) {
+            value.dispose();
+          }
+        }
+      }
+
+      function loadModel(url) {
+        // Remove old model if any
+        if (currentModel) {
+          scene.remove(currentModel);
+          currentModel.traverse((obj) => {
+            if (obj.isMesh) {
+              obj.geometry.dispose();
+              if (obj.material) {
+                if (Array.isArray(obj.material)) {
+                  obj.material.forEach((m) => cleanMaterial(m));
+                } else {
+                  cleanMaterial(obj.material);
+                }
+              }
+            }
+          });
+          currentModel = null;
+        }
+
+        loader.load(
+          url,
+          (gltf) => {
+            currentModel = gltf.scene;
+            scene.add(currentModel);
+
+            // --- Center and frame the model ---
+            const box = new THREE.Box3().setFromObject(currentModel);
+            const size = box.getSize(new THREE.Vector3());
+            const center = box.getCenter(new THREE.Vector3());
+
+            // Center model at origin
+            currentModel.position.sub(center);
+
+            const maxDim = Math.max(size.x, size.y, size.z);
+            const fov = (camera.fov * Math.PI) / 180;
+            const dist = maxDim / (2 * Math.tan(fov / 2));
+
+            // Slightly above center so it's not dead-center vertically
+            lookAtTarget.set(0, size.y * 0.15, 0);
+
+            // Final camera position = in front of model
+            camEnd.set(0, size.y * 0.15, dist * 1.3);
+
+            // Start camera behind & off to the side (Sketchfab-ish entrance)
+            camStart.copy(camEnd).add(
+              new THREE.Vector3(-maxDim * 0.6, maxDim * 0.3, -maxDim * 1.8)
+            );
+
+            // Start position & look direction
+            camera.position.copy(camStart);
+            camera.lookAt(lookAtTarget);
+            controls.target.copy(lookAtTarget);
+            controls.update();
+
+            // Entrance animation state
+            entranceStart = performance.now();
+            entranceActive = true;
+
+            // Model starts turned away, rotates to face front
+            currentModel.rotation.set(0, Math.PI, 0);
+          },
+          undefined,
+          (error) => {
+            console.error("Error loading model:", error);
+          }
+        );
+      }
+
+      function ease(t) {
+        // smoothstep-like: 3t² - 2t³
+        return t * t * (3 - 2 * t);
+      }
+
+      function animate(time) {
+        requestAnimationFrame(animate);
+
+        if (entranceActive && entranceStart !== null) {
+          let t = (time - entranceStart) / entranceDuration;
+          if (t >= 1) {
+            t = 1;
+            entranceActive = false;
+          }
+          const k = ease(t);
+
+          // Camera flies in
+          camera.position.lerpVectors(camStart, camEnd, k);
+          camera.lookAt(lookAtTarget);
+
+          // Model rotates from back to front
+          if (currentModel) {
+            currentModel.rotation.y = Math.PI * (1 - k);
+          }
+        } else {
+          // Normal orbit controls after entrance
+          controls.update();
+        }
+
+        renderer.render(scene, camera);
+      }
+
+      // Handle iframe size
+      function onWindowResize() {
+        const w = window.innerWidth;
+        const h = window.innerHeight;
+        camera.aspect = w / h;
+        camera.updateProjectionMatrix();
+        renderer.setSize(w, h);
+      }
+      window.addEventListener("resize", onWindowResize);
+
+      // Kick everything off
+      const initialModelUrl = getModelUrlFromQuery();
+      loadModel(initialModelUrl);
+      animate();
     </script>
   </body>
 </html>
