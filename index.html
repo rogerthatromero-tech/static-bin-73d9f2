@@ -2,7 +2,7 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
-    <title>Camo – Cocoa Flavor 3D</title>
+    <title>Camo – Flavor 3D Viewer</title>
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
 
     <!-- Google Model Viewer -->
@@ -36,8 +36,9 @@
   <body>
     <div class="viewer-wrapper">
       <model-viewer
-        src="assets/models/cacao.glb"
-        alt="Cacao flavor 3D model"
+        id="camo-viewer"
+        src=""
+        alt="Flavor 3D model"
         camera-controls
         auto-rotate
         autoplay
@@ -48,5 +49,20 @@
       >
       </model-viewer>
     </div>
+
+    <script>
+      // STEP A: choose which model to load based on ?model= in the URL
+      (function () {
+        const viewer = document.getElementById('camo-viewer');
+
+        // ?model=cacao  -> loads assets/models/cacao.glb
+        // ?model=strawberry -> assets/models/strawberry.glb, etc.
+        const params = new URLSearchParams(window.location.search);
+        const modelName = params.get('model') || 'cacao'; // default
+
+        const srcPath = `assets/models/${modelName}.glb`;
+        viewer.setAttribute('src', srcPath);
+      })();
+    </script>
   </body>
 </html>
