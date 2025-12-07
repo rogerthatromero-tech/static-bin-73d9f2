@@ -1,52 +1,67 @@
-<!DOCTYPE html>
-<html lang="en">
-  <head>
-    <meta charset="UTF-8" />
-    <title>Camo – Cocoa Flavor 3D</title>
-    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <script>
+      // Run after everything is parsed
+      window.addEventListener('DOMContentLoaded', () => {
+        const viewer = document.querySelector('#camo-viewer');
+        if (!viewer) return;
 
-    <!-- Google Model Viewer -->
-    <script
-      type="module"
-      src="https://unpkg.com/@google/model-viewer/dist/model-viewer.min.js"
-    ></script>
+        // If you're passing model via ?model=... in the URL, we can still
+        // override src here. If not, this simply uses whatever is in the HTML.
+        const urlParams = new URLSearchParams(window.location.search);
+        const modelParam = urlParams.get('model');
+        if (modelParam) {
+          viewer.src = modelParam;
+        }
 
-    <style>
-      html, body {
-        margin: 0;
-        padding: 0;
-        width: 100%;
-        height: 100%;
-        overflow: hidden;
-        background: #000;
-      }
+        // When the model + environment are ready, start entrance animation
+        viewer.addEventListener('load', () => {
+          const duration = 2500; // ms
+          const startTime = performance.now();
 
-      .viewer-wrapper {
-        width: 100%;
-        height: 100%;
-      }
+          // Start camera: behind & a bit far
+          const startTheta = 210;   // horizontal angle in degrees (behind/right)
+          const startPhi   = 85;    // vertical angle, almost top-down
+          const startRad   = 4.0;   // distance in meters
 
-      model-viewer {
-        width: 100%;
-        height: 100%;
-        --poster-color: #000000;
-      }
-    </style>
-  </head>
-  <body>
-    <div class="viewer-wrapper">
-      <model-viewer
-        src="assets/models/cacao.glb"
-        alt="Cacao flavor 3D model"
-        camera-controls
-        auto-rotate
-        autoplay
-        exposure="1.1"
-        shadow-intensity="1"
-        environment-image="neutral"
-        disable-zoom="false"
-      >
-      </model-viewer>
-    </div>
+          // End camera: front-ish & closer
+          const endTheta = 0;       // straight in front
+          const endPhi   = 75;      // slightly above
+          const endRad   = 2.2;     // closer to the model
+
+          function easeOutCubic(t) {
+            // 0 -> 1 easing
+            return 1 - Math.pow(1 - t, 3);
+          }
+
+          function animate(now) {
+            const elapsed = now - startTime;
+            let t = elapsed / duration;
+
+            if (t > 1) t = 1;
+            const ease = easeOutCubic(t);
+
+            // Interpolate camera orbit values
+            const theta = startTheta + (endTheta - startTheta) * ease;
+            const phi   = startPhi   + (endPhi   - startPhi)   * ease;
+            const rad   = startRad   + (endRad   - startRad)   * ease;
+
+            // Apply to model-viewer:
+            // format: "<theta>deg <phi>deg <radius>m"
+            viewer.cameraOrbit = `${theta}deg ${phi}deg ${rad}m`;
+
+            if (t < 1) {
+              requestAnimationFrame(animate);
+            } else {
+              // Entrance finished.
+              // Optional: you can start turntable spin here:
+              // viewer.autoRotate = true;
+            }
+          }
+
+          // Set initial position before first frame
+          viewer.cameraOrbit = `${startTheta}deg ${startPhi}deg ${startRad}m`;
+          requestAnimationFrame(animate);
+        });
+      });
+    </script>
   </body>
 </html>
