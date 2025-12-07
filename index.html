@@ -36,9 +36,9 @@
   <body>
     <div class="viewer-wrapper">
       <model-viewer
-        id="camo-viewer"
+        id="camo-model"
         src=""
-        alt="Flavor 3D model"
+        alt="Camo flavor 3D model"
         camera-controls
         auto-rotate
         autoplay
@@ -51,18 +51,28 @@
     </div>
 
     <script>
-      // STEP A: choose which model to load based on ?model= in the URL
-      (function () {
-        const viewer = document.getElementById('camo-viewer');
-
-        // ?model=cacao  -> loads assets/models/cacao.glb
-        // ?model=strawberry -> assets/models/strawberry.glb, etc.
+      function getModelFromQuery() {
         const params = new URLSearchParams(window.location.search);
-        const modelName = params.get('model') || 'cacao'; // default
+        const raw = params.get("model");
 
-        const srcPath = `assets/models/${modelName}.glb`;
-        viewer.setAttribute('src', srcPath);
-      })();
+        // If Shopify sends ?model=<encoded-shopify-url>, decode it
+        if (raw) {
+          try {
+            return decodeURIComponent(raw);
+          } catch (e) {
+            return raw;
+          }
+        }
+
+        // Fallback to the old local file if no param is given
+        return "assets/models/cacao.glb";
+      }
+
+      window.addEventListener("DOMContentLoaded", () => {
+        const mv = document.getElementById("camo-model");
+        if (!mv) return;
+        mv.src = getModelFromQuery();
+      });
     </script>
   </body>
 </html>
