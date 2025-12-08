@@ -41,11 +41,12 @@
         src=""
         alt="Flavor 3D model"
         camera-controls
-        auto-rotate
-        auto-rotate-delay="5000"
+        /* we’ll control auto-rotate via JS */
         exposure="1.1"
         shadow-intensity="1"
         environment-image="neutral"
+        interaction-prompt="none"
+        camera-orbit="0deg 60deg 1.6m"
       >
       </model-viewer>
     </div>
@@ -77,9 +78,14 @@
       const viewer = document.querySelector("#flavor-viewer");
       viewer.src = modelUrl;
 
-      // --- 2. Sketchfab-style entrance animation ---
+      // --- 2. Sketchfab-style entrance animation + auto-rotate control ---
 
       let entranceDone = false;
+      let autoRotateResumeTimeout = null;
+
+      // We'll manage auto-rotate via JS
+      viewer.autoRotate = false;
+      viewer.autoRotateDelay = 3000; // ms after restart
 
       function runEntranceAnimation() {
         if (entranceDone) return;
@@ -88,7 +94,7 @@
         const duration = 2500; // ms
         const startTime = performance.now();
 
-        // Start: behind + a bit higher + further away
+        // Start: behind + higher + further away
         const startTheta = 220; // deg around model
         const endTheta = 0; // front
 
@@ -103,27 +109,54 @@
 
           // ease in-out cubic
           const ease =
-            t < 0.5
-              ? 4 * t * t * t
-              : 1 - Math.pow(-2 * t + 2, 3) / 2;
+            t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
 
           const theta = startTheta + (endTheta - startTheta) * ease;
           const phi = startPhi + (endPhi - startPhi) * ease;
-          const radius =
-            startRadius + (endRadius - startRadius) * ease;
+          const radius = startRadius + (endRadius - startRadius) * ease;
 
           viewer.cameraOrbit = `${theta}deg ${phi}deg ${radius}m`;
 
           if (t < 1) {
             requestAnimationFrame(step);
+          } else {
+            // When entrance finishes, begin slow auto-rotate
+            viewer.autoRotate = true;
           }
         }
 
         requestAnimationFrame(step);
       }
 
+      // Pause auto-rotate on user interaction, then resume after idle
+      function handleUserInteraction() {
+        // stop any scheduled resume
+        if (autoRotateResumeTimeout) {
+          clearTimeout(autoRotateResumeTimeout);
+          autoRotateResumeTimeout = null;
+        }
+
+        // stop spinning while user is interacting
+        viewer.autoRotate = false;
+
+        // schedule resume after some idle time
+        autoRotateResumeTimeout = setTimeout(() => {
+          viewer.autoRotate = true;
+        }, 8000); // 8s after last interaction
+      }
+
+      // Attach interaction listeners
+      ["pointerdown", "pointerup", "wheel", "keydown", "touchstart", "touchend"].forEach(
+        (eventName) => {
+          viewer.addEventListener(eventName, handleUserInteraction);
+        }
+      );
+
       // When the 3D model is ready, kick off the entrance animation
       viewer.addEventListener("load", () => {
+        // ensure we start from the "behind" pose before animating
+        viewer.cameraOrbit = "220deg 70deg 2.8m";
+
         // Tiny delay so the model is fully rendered before we start moving
         setTimeout(runEntranceAnimation, 200);
       });
